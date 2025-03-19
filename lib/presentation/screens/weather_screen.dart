@@ -1,12 +1,9 @@
-import 'dart:convert';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:intl/intl.dart';
-import 'package:weather_app/secrets.dart';
-import 'additional_info_item.dart';
-import 'hourly_forecast_item.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:weather_app/bloc/weather_bloc.dart';
+import '../widgets/additional_info_item.dart';
 
 class WeatherScreen extends StatefulWidget {
   const WeatherScreen({super.key});
@@ -18,25 +15,10 @@ class WeatherScreen extends StatefulWidget {
 class _WeatherScreenState extends State<WeatherScreen> {
   late Future<Map<String, dynamic>> weather;
 
-  Future<Map<String, dynamic>> getCurrentWeather() async {
-    try {
-      String cityName = 'London';
-      final res = await http.get(Uri.parse(
-          'https://api.openweathermap.org/data/2.5/forecast?q=$cityName&appid=$openWeatherApiKey'));
-      final data = jsonDecode(res.body);
-      if (data['cod'] != '200') {
-        throw 'An unestimated error occurred';
-      }
-      return data;
-    } catch (e) {
-      throw e.toString();
-    }
-  }
-
   @override
   void initState() {
     super.initState();
-    weather = getCurrentWeather();
+    context.read<WeatherBloc>().add(WeatherFetched());
   }
 
   @override
@@ -52,34 +34,28 @@ class _WeatherScreenState extends State<WeatherScreen> {
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: () {
-                setState(() {
-                  weather = getCurrentWeather();
-                });
+                context.read<WeatherBloc>().add(WeatherFetched());
               },
             ),
           ],
         ),
-        body: FutureBuilder(
-          future: weather,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
+        body: BlocBuilder<WeatherBloc, WeatherState>(
+          builder: (context, state) {
+            if (state is WeatherFailure) {
+              return Center(child: Text(state.error));
+            }
+            if (state is! WeatherSuccess) {
               return const Center(
                 child: CircularProgressIndicator.adaptive(),
               );
             }
-            if (snapshot.hasError) {
-              return Center(
-                child: Text(snapshot.error.toString()),
-              );
-            }
-            final data = snapshot.data!;
+            final data = state.weatherModel;
 
-            final currentWeatherData = data['list'][0];
-            final currentTemp = currentWeatherData['main']['temp'];
-            final currentSky = currentWeatherData['weather'][0]['main'];
-            final currentPressure = currentWeatherData['main']['pressure'];
-            final currentWindSpeed = currentWeatherData['wind']['speed'];
-            final currentHumidity = currentWeatherData['main']['humidity'];
+            final currentTemp = data.currentTemp;
+            final currentSky = data.currentSky;
+            final currentPressure = data.currentPressure;
+            final currentWindSpeed = data.currentWindSpeed;
+            final currentHumidity = data.currentHumidity;
 
             return Padding(
               padding: const EdgeInsets.all(16.0),
@@ -130,26 +106,24 @@ class _WeatherScreenState extends State<WeatherScreen> {
                     "Hourly Forecast",
                     style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                   ),
-                  SizedBox(
-                      height: 120,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: 9,
-                        itemBuilder: (context, index) {
-                          final hourlyForecast = data['list'][index + 1];
-                          final hourlySky =
-                              hourlyForecast['weather'][0]['main'];
-                          final time = DateTime.parse(hourlyForecast['dt_txt']);
-                          return HourlyForecastItem(
-                              time: DateFormat.Hm().format(time),
-                              icon:
-                                  hourlySky == 'Clouds' || hourlySky == 'Clear'
-                                      ? Icons.cloud
-                                      : Icons.sunny,
-                              temperature:
-                                  hourlyForecast['main']['temp'].toString());
-                        },
-                      ))
+                  // SizedBox(
+                  //     height: 120,
+                  //     child: ListView.builder(
+                  //       scrollDirection: Axis.horizontal,
+                  //       itemCount: 9,
+                  //       itemBuilder: (context, index) {
+                  //         final hourlySky = data.currentSky;
+                  //         final time = DateTime.parse(hourlyForecast['dt_txt']);
+                  //         return HourlyForecastItem(
+                  //             time: DateFormat.Hm().format(time),
+                  //             icon:
+                  //                 hourlySky == 'Clouds' || hourlySky == 'Clear'
+                  //                     ? Icons.cloud
+                  //                     : Icons.sunny,
+                  //             temperature:
+                  //                 hourlyForecast['main']['temp'].toString());
+                  //       },
+                  //     ))
 
                   // SingleChildScrollView(
                   //   scrollDirection: Axis.horizontal,
@@ -170,7 +144,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
                   //     ],
                   //   ),
                   // ),
-                  ,
+                  // ,
                   const Text("Additional Information",
                       style:
                           TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
